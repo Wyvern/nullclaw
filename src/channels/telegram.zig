@@ -262,7 +262,22 @@ pub const TelegramChannel = struct {
     }
 
     pub fn isUserAllowed(self: *const TelegramChannel, sender: []const u8) bool {
-        return root.isAllowedExact(self.allowed_users, sender);
+        for (self.allowed_users) |a| {
+            if (std.mem.eql(u8, a, "*")) return true;
+            // Strip leading "@" from allowlist entry (PicoClaw compat)
+            const trimmed = if (a.len > 1 and a[0] == '@') a[1..] else a;
+            // Case-insensitive: Telegram usernames are case-insensitive
+            if (std.ascii.eqlIgnoreCase(trimmed, sender)) return true;
+        }
+        return false;
+    }
+
+    /// Check if any of the given identities (username, user_id) is allowed.
+    pub fn isAnyIdentityAllowed(self: *const TelegramChannel, identities: []const []const u8) bool {
+        for (identities) |id| {
+            if (self.isUserAllowed(id)) return true;
+        }
+        return false;
     }
 
     pub fn healthCheck(_: *TelegramChannel) bool {
@@ -505,13 +520,40 @@ pub const TelegramChannel = struct {
 
             const message = update.object.get("message") orelse continue;
 
-            // Get sender info
+            // Get sender info — check both @username and numeric user_id
             const from_obj = message.object.get("from") orelse continue;
             const username_val = from_obj.object.get("username");
             const username = if (username_val) |uv| (if (uv == .string) uv.string else "unknown") else "unknown";
 
-            // Check allowlist
-            if (!self.isUserAllowed(username)) continue;
+            var user_id_buf: [32]u8 = undefined;
+            const user_id: ?[]const u8 = blk_uid: {
+                const id_val = from_obj.object.get("id") orelse break :blk_uid null;
+                if (id_val != .integer) break :blk_uid null;
+                break :blk_uid std.fmt.bufPrint(&user_id_buf, "{d}", .{id_val.integer}) catch null;
+            };
+
+            // Check allowlist against all known identities
+            var ids_buf: [2][]const u8 = undefined;
+            var ids_len: usize = 0;
+            ids_buf[ids_len] = username;
+            ids_len += 1;
+            if (user_id) |uid| {
+                ids_buf[ids_len] = uid;
+                ids_len += 1;
+            }
+            if (!self.isAnyIdentityAllowed(ids_buf[0..ids_len])) {
+                log.warn("ignoring message from unauthorized user: username={s}, user_id={s}", .{
+                    username,
+                    user_id orelse "unknown",
+                });
+                continue;
+            }
+
+            // Use username as sender identity, fall back to numeric id
+            const sender_identity = if (!std.mem.eql(u8, username, "unknown"))
+                username
+            else
+                (user_id orelse "unknown");
 
             // Get chat_id
             const chat_obj = message.object.get("chat") orelse continue;
@@ -555,7 +597,7 @@ pub const TelegramChannel = struct {
             };
 
             try messages.append(allocator, .{
-                .id = try allocator.dupe(u8, username),
+                .id = try allocator.dupe(u8, sender_identity),
                 .sender = try allocator.dupe(u8, chat_id_str),
                 .content = final_content,
                 .channel = "telegram",
@@ -1167,6 +1209,57 @@ test "telegram allowed_users non-empty filters correctly" {
     try std.testing.expect(ch.isUserAllowed("bob"));
     try std.testing.expect(!ch.isUserAllowed("eve"));
     try std.testing.expect(!ch.isUserAllowed(""));
+}
+
+test "telegram allowed_users wildcard allows all" {
+    const users = [_][]const u8{"*"};
+    const ch = TelegramChannel.init(std.testing.allocator, "tok", &users);
+    try std.testing.expect(ch.isUserAllowed("anyone"));
+    try std.testing.expect(ch.isUserAllowed("admin"));
+}
+
+test "telegram allowed_users case insensitive" {
+    const users = [_][]const u8{"Alice"};
+    const ch = TelegramChannel.init(std.testing.allocator, "tok", &users);
+    try std.testing.expect(ch.isUserAllowed("Alice"));
+    try std.testing.expect(ch.isUserAllowed("alice"));
+    try std.testing.expect(ch.isUserAllowed("ALICE"));
+}
+
+test "telegram allowed_users strips @ prefix" {
+    const users = [_][]const u8{"@alice"};
+    const ch = TelegramChannel.init(std.testing.allocator, "tok", &users);
+    try std.testing.expect(ch.isUserAllowed("alice"));
+    try std.testing.expect(!ch.isUserAllowed("@alice"));
+    try std.testing.expect(!ch.isUserAllowed("bob"));
+}
+
+test "telegram isAnyIdentityAllowed matches username" {
+    const users = [_][]const u8{"alice"};
+    const ch = TelegramChannel.init(std.testing.allocator, "tok", &users);
+    const ids = [_][]const u8{ "alice", "123456" };
+    try std.testing.expect(ch.isAnyIdentityAllowed(&ids));
+}
+
+test "telegram isAnyIdentityAllowed matches numeric id" {
+    const users = [_][]const u8{"123456"};
+    const ch = TelegramChannel.init(std.testing.allocator, "tok", &users);
+    const ids = [_][]const u8{ "unknown", "123456" };
+    try std.testing.expect(ch.isAnyIdentityAllowed(&ids));
+}
+
+test "telegram isAnyIdentityAllowed denies when none match" {
+    const users = [_][]const u8{ "alice", "987654" };
+    const ch = TelegramChannel.init(std.testing.allocator, "tok", &users);
+    const ids = [_][]const u8{ "unknown", "123456" };
+    try std.testing.expect(!ch.isAnyIdentityAllowed(&ids));
+}
+
+test "telegram isAnyIdentityAllowed wildcard allows all" {
+    const users = [_][]const u8{ "alice", "*" };
+    const ch = TelegramChannel.init(std.testing.allocator, "tok", &users);
+    const ids = [_][]const u8{ "bob", "999" };
+    try std.testing.expect(ch.isAnyIdentityAllowed(&ids));
 }
 
 // ════════════════════════════════════════════════════════════════════════════
