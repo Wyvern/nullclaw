@@ -18,7 +18,7 @@
 The smallest fully autonomous AI assistant infrastructure — a static Zig binary that fits on any $5 board, boots in milliseconds, and requires nothing but libc.
 
 ```
-678 KB binary · <2 ms startup · 2,656 tests · 22+ providers · 11 channels · Pluggable everything
+678 KB binary · <2 ms startup · 2,738 tests · 22+ providers · 13 channels · Pluggable everything
 ```
 
 ### Features
@@ -46,8 +46,8 @@ Local machine benchmark (macOS arm64, Feb 2026), normalized for 0.8 GHz edge har
 | **RAM** | > 1 GB | > 100 MB | < 10 MB | < 5 MB | **~1 MB** |
 | **Startup (0.8 GHz)** | > 500 s | > 30 s | < 1 s | < 10 ms | **< 8 ms** |
 | **Binary Size** | ~28 MB (dist) | N/A (Scripts) | ~8 MB | 3.4 MB | **678 KB** |
-| **Tests** | — | — | — | 1,017 | **1,653** |
-| **Source Files** | ~400+ | — | — | ~120 | **96** |
+| **Tests** | — | — | — | 1,017 | **2,738** |
+| **Source Files** | ~400+ | — | — | ~120 | **~110** |
 | **Cost** | Mac Mini $599 | Linux SBC ~$50 | Linux Board $10 | Any $10 hardware | **Any $5 hardware** |
 
 > Measured with `/usr/bin/time -l` on ReleaseSmall builds. nullclaw is a static binary with zero runtime dependencies.
@@ -115,7 +115,7 @@ Every subsystem is a **vtable interface** — swap implementations with a config
 | Subsystem | Interface | Ships with | Extend |
 |-----------|-----------|------------|--------|
 | **AI Models** | `Provider` | 22+ providers (OpenRouter, Anthropic, OpenAI, Ollama, Venice, Groq, Mistral, xAI, DeepSeek, Together, Fireworks, Perplexity, Cohere, Bedrock, etc.) | `custom:https://your-api.com` — any OpenAI-compatible API |
-| **Channels** | `Channel` | CLI, Telegram, Discord, Slack, iMessage, Matrix, WhatsApp, Webhook, IRC, Lark/Feishu, DingTalk | Any messaging API |
+| **Channels** | `Channel` | CLI, Telegram, Discord, Slack, iMessage, Matrix, WhatsApp, Webhook, IRC, Lark/Feishu, DingTalk, QQ, MaixCam | Any messaging API |
 | **Memory** | `Memory` | SQLite with hybrid search (FTS5 + vector cosine similarity), Markdown | Any persistence backend |
 | **Tools** | `Tool` | shell, file_read, file_write, file_edit, memory_store, memory_recall, memory_forget, browser_open, screenshot, composio, http_request, hardware_info, hardware_memory, and more | Any capability |
 | **Observability** | `Observer` | Noop, Log, File, Multi | Prometheus, OTel |
@@ -294,7 +294,7 @@ zig build test --summary all       # 2,656 tests
 Language:     Zig 0.15
 Source files: ~110
 Lines of code: ~45,000
-Tests:        2,656
+Tests:        2,738
 Binary:       678 KB (ReleaseSmall)
 Peak RSS:     ~1 MB
 Startup:      <2 ms (Apple Silicon)
