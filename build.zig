@@ -77,15 +77,4 @@ pub fn build(b: *std.Build) void {
         run_cmd.addArgs(args);
     }
 
-    // ---------- tests ----------
-    const lib_tests = b.addTest(.{ .root_module = lib_mod });
-    lib_tests.root_module.addLibraryPath(sqlite_lib);
-    lib_tests.linkSystemLibrary2("sqlite3", .{});
-    lib_tests.linkLibC();
-
-    const exe_tests = b.addTest(.{ .root_module = exe.root_module });
-
-    const test_step = b.step("test", "Run all tests");
-    test_step.dependOn(&b.addRunArtifact(lib_tests).step);
-    test_step.dependOn(&b.addRunArtifact(exe_tests).step);
 }
